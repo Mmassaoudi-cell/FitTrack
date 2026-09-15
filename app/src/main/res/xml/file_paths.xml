@@ -1,0 +1,4 @@
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="food_photos" path="food_photos/" />
+    <external-files-path name="exports" path="exports/" />
+</paths>
