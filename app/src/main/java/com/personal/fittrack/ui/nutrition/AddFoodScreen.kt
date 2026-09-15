@@ -6,8 +6,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -51,7 +51,13 @@ fun AddFoodScreen(onDone: () -> Unit) {
     var customCalories by remember { mutableStateOf("") }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Add Food") }) }) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
             ExposedDropdownMenuBox(expanded = mealExpanded, onExpandedChange = { mealExpanded = it }) {
                 OutlinedTextField(
                     value = meal.name.lowercase().replaceFirstChar { it.uppercase() },
@@ -80,8 +86,8 @@ fun AddFoodScreen(onDone: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
             )
 
-            LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                items(results, key = { it.id }) { item ->
+            Column(modifier = Modifier.fillMaxWidth()) {
+                results.forEach { item ->
                     Card(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         onClick = { selected = item; query = item.name; results = emptyList() }

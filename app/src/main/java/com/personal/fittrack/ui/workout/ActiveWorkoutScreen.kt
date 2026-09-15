@@ -6,8 +6,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -69,7 +69,13 @@ fun ActiveWorkoutScreen(sessionId: Long, onEndWorkout: () -> Unit) {
             TopAppBar(title = { Text(state.session?.name ?: "Workout") })
         }
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -157,8 +163,8 @@ fun ActiveWorkoutScreen(sessionId: Long, onEndWorkout: () -> Unit) {
                 Spacer12()
 
                 Text("Sets this exercise", style = MaterialTheme.typography.labelLarge)
-                LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                    items(state.setsForSelectedExercise, key = { it.id }) { set ->
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    state.setsForSelectedExercise.forEach { set ->
                         Text("Set ${set.setIndex}: ${formatWeight(set.weightKg)} ${displayUnit.name.lowercase()} x ${set.reps}")
                     }
                 }
