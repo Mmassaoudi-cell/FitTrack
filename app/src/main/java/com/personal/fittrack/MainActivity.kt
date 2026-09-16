@@ -7,6 +7,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.SideEffect
+import androidx.core.view.WindowCompat
 import com.personal.fittrack.data.prefs.AppTheme
 import com.personal.fittrack.ui.navigation.FitTrackNavGraph
 import com.personal.fittrack.ui.theme.FitTrackTheme
@@ -24,6 +26,12 @@ class MainActivity : ComponentActivity() {
                 AppTheme.LIGHT -> false
                 AppTheme.DARK -> true
                 AppTheme.SYSTEM -> isSystemInDarkTheme()
+            }
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !useDarkTheme
+                    isAppearanceLightNavigationBars = !useDarkTheme
+                }
             }
             FitTrackTheme(darkTheme = useDarkTheme) {
                 FitTrackNavGraph()

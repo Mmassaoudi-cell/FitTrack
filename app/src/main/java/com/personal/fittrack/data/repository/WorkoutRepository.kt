@@ -7,9 +7,13 @@ import com.personal.fittrack.data.db.entity.SetEntryEntity
 import com.personal.fittrack.data.db.entity.WorkoutSessionEntity
 import com.personal.fittrack.data.seed.DefaultExercises
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import com.personal.fittrack.domain.currentDay
+import com.personal.fittrack.domain.InputValidation
 import java.time.LocalDate
 import java.time.ZoneId
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class WorkoutRepository(
     private val exerciseDao: ExerciseDao,
     private val workoutDao: WorkoutDao
@@ -29,8 +33,24 @@ class WorkoutRepository(
 
     fun observeSessions(): Flow<List<WorkoutSessionEntity>> = workoutDao.observeSessions()
 
-    suspend fun startSession(name: String): Long =
-        workoutDao.insertSession(WorkoutSessionEntity(name = name, startTimeEpochMillis = System.currentTimeMillis()))
+    suspend fun startSession(name: String, exercisePlan: String = ""): Long =
+        workoutDao.startOrResume(name, exercisePlan)
+
+    fun observeRoutines() = workoutDao.observeRoutines()
+    suspend fun deleteRoutine(id: Long) = workoutDao.deleteRoutine(id)
+    suspend fun saveRoutine(name: String, exerciseIds: List<Long>): Long {
+        require(name.isNotBlank() && exerciseIds.isNotEmpty()) { "Choose a name and at least one exercise." }
+        return workoutDao.insertRoutine(com.personal.fittrack.data.db.entity.WorkoutRoutineEntity(
+            name = name.trim(), exerciseIds = exerciseIds.distinct().joinToString(",")
+        ))
+    }
+
+    fun observeAllSets() = workoutDao.observeAllSets()
+
+    suspend fun appendSet(sessionId: Long, exerciseId: Long, weightKg: Double, reps: Int): Long {
+        require(InputValidation.nonNegative(weightKg) && reps in 1..999) { "Enter a valid weight and 1–999 reps." }
+        return workoutDao.appendSet(sessionId, exerciseId, weightKg, reps)
+    }
 
     suspend fun endSession(session: WorkoutSessionEntity) {
         workoutDao.updateSession(session.copy(endTimeEpochMillis = System.currentTimeMillis()))
@@ -63,7 +83,11 @@ class WorkoutRepository(
         )
     )
 
-    suspend fun updateSet(set: SetEntryEntity) = workoutDao.updateSet(set)
+    suspend fun updateSet(set: SetEntryEntity) {
+        require(InputValidation.nonNegative(set.weightKg) && set.reps in 1..999) { "Enter a valid weight and 1–999 reps." }
+        workoutDao.updateSet(set)
+    }
+    suspend fun restoreSet(set: SetEntryEntity) = workoutDao.restoreDeletedSet(set)
 
     suspend fun deleteSet(id: Long) = workoutDao.deleteSet(id)
 
@@ -77,10 +101,9 @@ class WorkoutRepository(
     suspend fun getLastPerformance(exerciseId: Long): SetEntryEntity? =
         workoutDao.getRecentSetsForExercise(exerciseId, 1).firstOrNull()
 
-    fun observeSetsToday(): Flow<List<SetEntryEntity>> {
-        val zone = ZoneId.systemDefault()
-        val startOfDay = LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()
-        val endOfDay = LocalDate.now(zone).plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
-        return workoutDao.observeSetsBetween(startOfDay, endOfDay)
+    fun observeSetsToday(): Flow<List<SetEntryEntity>> = currentDay().flatMapLatest { (day, zone) ->
+        val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
+        val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
+        workoutDao.observeSetsBetween(start, end)
     }
 }

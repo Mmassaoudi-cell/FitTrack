@@ -26,6 +26,12 @@ class FoodRecognizer {
             .map { RecognizedLabel(it.text, it.confidence) }
     }
 
+    suspend fun recognize(context: android.content.Context, uri: android.net.Uri): List<RecognizedLabel> {
+        val image = InputImage.fromFilePath(context, uri)
+        return labeler.process(image).await().sortedByDescending { it.confidence }.map { RecognizedLabel(it.text, it.confidence) }
+    }
+    fun close() = labeler.close()
+
     fun confidenceBucket(confidence: Float): EstimateConfidence = when {
         confidence >= 0.75f -> EstimateConfidence.HIGH
         confidence >= 0.45f -> EstimateConfidence.MEDIUM
@@ -49,7 +55,6 @@ object FoodLabelMapper {
         "pasta" to "Pasta, cooked",
         "spaghetti" to "Pasta, cooked",
         "bread" to "Bread, white",
-        "baked goods" to "Bread, white",
         "egg" to "Eggs",
         "cheese" to "Cheese, cheddar",
         "banana" to "Banana",
@@ -58,30 +63,25 @@ object FoodLabelMapper {
         "avocado" to "Avocado",
         "broccoli" to "Broccoli",
         "salad" to "Salad, mixed greens",
-        "vegetable" to "Salad, mixed greens",
         "yogurt" to "Yogurt, plain",
         "oatmeal" to "Oatmeal, cooked",
         "peanut butter" to "Peanut butter",
         "coffee" to "Coffee, black",
         "ice cream" to "Ice cream",
-        "dessert" to "Ice cream",
-        "seafood" to "Fish, white (cooked)",
         "fish" to "Fish, white (cooked)",
         "salmon" to "Salmon (cooked)",
         "tuna" to "Tuna (canned in water)",
-        "steak" to "Beef, ground (cooked)",
         "beef" to "Beef, ground (cooked)",
         "chicken" to "Chicken breast (cooked)",
         "potato" to "Potatoes, boiled",
-        "pastry" to "French toast / pastry",
         "pancake" to "French toast / pastry"
     )
 
     fun bestMatch(labels: List<RecognizedLabel>): Pair<RecognizedLabel, String>? {
-        for (label in labels) {
+        for (label in labels.filter { it.confidence >= 0.60f }) {
             val key = label.text.lowercase()
             keywordToFoodName[key]?.let { return label to it }
-            keywordToFoodName.entries.firstOrNull { key.contains(it.key) }?.let { return label to it.value }
+            keywordToFoodName.entries.sortedByDescending { it.key.length }.firstOrNull { Regex("\\b" + Regex.escape(it.key) + "\\b").containsMatchIn(key) }?.let { return label to it.value }
         }
         return null
     }

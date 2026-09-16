@@ -15,6 +15,7 @@ class FitTrackApp : Application() {
         super.onCreate()
         container = AppContainer(this)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            cacheDir.resolve("food_photos").listFiles()?.filter { it.isFile && it.name.startsWith("meal_") }?.forEach { it.delete() }
             container.workoutRepository.ensureSeeded()
             container.nutritionRepository.ensureSeeded()
         }

@@ -22,11 +22,23 @@ interface FoodDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertFoodItems(items: List<FoodItemEntity>)
 
+    @Query("UPDATE food_items SET isFavorite = :favorite WHERE id = :id")
+    suspend fun setFavorite(id: Long, favorite: Boolean)
+
     @Insert
     suspend fun insertFoodItem(item: FoodItemEntity): Long
 
     @Query("SELECT * FROM food_log_entries WHERE dateEpochDay = :epochDay ORDER BY loggedAtEpochMillis ASC")
     fun observeLogForDay(epochDay: Long): Flow<List<FoodLogEntryEntity>>
+
+    @androidx.room.Update
+    suspend fun updateLogEntry(entry: FoodLogEntryEntity)
+
+    @androidx.room.Transaction
+    suspend fun insertCustomAndLog(item: FoodItemEntity, entry: FoodLogEntryEntity): Long {
+        val id = insertFoodItem(item)
+        return insertLogEntry(entry.copy(foodItemId = id))
+    }
 
     @Insert
     suspend fun insertLogEntry(entry: FoodLogEntryEntity): Long

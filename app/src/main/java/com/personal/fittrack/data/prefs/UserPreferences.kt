@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.map
 
 enum class AppTheme { SYSTEM, LIGHT, DARK }
 
+@kotlinx.serialization.Serializable
 data class AppSettings(
     val weightUnit: WeightUnit = WeightUnit.KG,
     val weightIncrementKg: Double = 2.5,
@@ -32,7 +33,12 @@ data class AppSettings(
 
 private val Context.dataStore by preferencesDataStore(name = "fittrack_settings")
 
-class UserPreferences(private val context: Context) {
+interface SettingsStore {
+    val settings: Flow<AppSettings>
+    suspend fun restore(settings: AppSettings)
+}
+
+class UserPreferences(private val context: Context) : SettingsStore {
     private object Keys {
         val WEIGHT_UNIT = stringPreferencesKey("weight_unit")
         val WEIGHT_INCREMENT_KG = floatPreferencesKey("weight_increment_kg")
@@ -46,7 +52,7 @@ class UserPreferences(private val context: Context) {
         val HAS_COMPLETED_PROFILE = booleanPreferencesKey("has_completed_profile")
     }
 
-    val settings: Flow<AppSettings> = context.dataStore.data.map { prefs -> prefs.toAppSettings() }
+    override val settings: Flow<AppSettings> = context.dataStore.data.map { prefs -> prefs.toAppSettings() }
 
     private fun Preferences.toAppSettings(): AppSettings = AppSettings(
         weightUnit = this[Keys.WEIGHT_UNIT]?.let { runCatching { WeightUnit.valueOf(it) }.getOrNull() } ?: WeightUnit.KG,
@@ -66,10 +72,12 @@ class UserPreferences(private val context: Context) {
     }
 
     suspend fun setWeightIncrementKg(increment: Double) {
+        require(increment.toFloat().isFinite() && increment.toFloat() > 0) { "Enter an increment greater than zero." }
         context.dataStore.edit { it[Keys.WEIGHT_INCREMENT_KG] = increment.toFloat() }
     }
 
     suspend fun setCalorieTargetOverride(value: Int?) {
+        require(value == null || value > 0) { "Enter a target greater than zero." }
         context.dataStore.edit {
             if (value == null) it.remove(Keys.CALORIE_TARGET_OVERRIDE) else it[Keys.CALORIE_TARGET_OVERRIDE] = value
         }
@@ -87,12 +95,28 @@ class UserPreferences(private val context: Context) {
         goal: FitnessGoal
     ) {
         context.dataStore.edit {
+            require(ageYears in 1..120 && heightCm.toFloat().isFinite() && heightCm.toFloat() > 0) { "Enter a valid age and height." }
             it[Keys.PROFILE_SEX] = sex.name
             it[Keys.PROFILE_AGE] = ageYears
             it[Keys.PROFILE_HEIGHT_CM] = heightCm.toFloat()
             it[Keys.PROFILE_ACTIVITY] = activityLevel.name
             it[Keys.PROFILE_GOAL] = goal.name
             it[Keys.HAS_COMPLETED_PROFILE] = true
+        }
+    }
+    override suspend fun restore(settings: AppSettings) {
+        context.dataStore.edit {
+            it[Keys.WEIGHT_UNIT] = settings.weightUnit.name
+            it[Keys.WEIGHT_INCREMENT_KG] = settings.weightIncrementKg.toFloat()
+            if (settings.calorieTargetOverride == null) it.remove(Keys.CALORIE_TARGET_OVERRIDE)
+            else it[Keys.CALORIE_TARGET_OVERRIDE] = settings.calorieTargetOverride
+            it[Keys.THEME] = settings.theme.name
+            it[Keys.PROFILE_SEX] = settings.profileSex.name
+            it[Keys.PROFILE_AGE] = settings.profileAgeYears
+            it[Keys.PROFILE_HEIGHT_CM] = settings.profileHeightCm.toFloat()
+            it[Keys.PROFILE_ACTIVITY] = settings.profileActivityLevel.name
+            it[Keys.PROFILE_GOAL] = settings.profileGoal.name
+            it[Keys.HAS_COMPLETED_PROFILE] = settings.hasCompletedProfile
         }
     }
 }

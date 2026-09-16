@@ -14,12 +14,12 @@ class AppContainer(context: Context) {
         context.applicationContext,
         AppDatabase::class.java,
         "fittrack.db"
-    ).build()
+    ).addMigrations(com.personal.fittrack.data.db.MIGRATION_1_2).build()
 
     val userPreferences = UserPreferences(context.applicationContext)
 
     val workoutRepository = WorkoutRepository(database.exerciseDao(), database.workoutDao())
     val bodyWeightRepository = BodyWeightRepository(database.bodyWeightDao())
     val nutritionRepository = NutritionRepository(database.foodDao())
-    val exportImportManager = DataExportImportManager(context.applicationContext, database)
+    val exportImportManager = DataExportImportManager(context.applicationContext, database, userPreferences)
 }

@@ -11,6 +11,7 @@ import com.personal.fittrack.domain.VolumeCalculator
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 data class HomeUiState(
     val totalExercises: Int = 0,
@@ -21,13 +22,16 @@ data class HomeUiState(
     val caloriesBurnedEstimate: Double = 0.0,
     val calorieTarget: Int = 2000,
     val currentWeightKg: Double? = null,
+    val weightUnit: com.personal.fittrack.domain.WeightUnit = com.personal.fittrack.domain.WeightUnit.KG,
+    val profileComplete: Boolean = false,
+    val hasActiveWorkout: Boolean = false,
     val isLoading: Boolean = true
 ) {
     val remainingCalories: Double get() = calorieTarget - caloriesConsumed
 }
 
 class HomeViewModel(
-    workoutRepository: WorkoutRepository,
+    private val workoutRepository: WorkoutRepository,
     nutritionRepository: NutritionRepository,
     bodyWeightRepository: BodyWeightRepository,
     userPreferences: UserPreferences
@@ -37,14 +41,11 @@ class HomeViewModel(
         workoutRepository.observeSetsToday(),
         nutritionRepository.observeLogForDay(),
         bodyWeightRepository.observeLatest(),
-        userPreferences.settings
-    ) { sets, foodEntries, latestWeight, settings ->
+        userPreferences.settings,
+        workoutRepository.observeSessions()
+    ) { sets, foodEntries, latestWeight, settings, sessions ->
         val weightForEstimate = latestWeight?.weightKg ?: 70.0
-        val durationMinutes = when {
-            sets.isEmpty() -> 0.0
-            sets.size == 1 -> 5.0
-            else -> ((sets.maxOf { it.completedAtEpochMillis } - sets.minOf { it.completedAtEpochMillis }) / 60000.0).coerceAtLeast(1.0)
-        }
+        val durationMinutes = com.personal.fittrack.domain.WorkoutDuration.minutes(sets)
         val met = 6.0 // moderate resistance training
         val caloriesBurned = met * 3.5 * weightForEstimate / 200.0 * durationMinutes
 
@@ -66,7 +67,22 @@ class HomeViewModel(
             caloriesBurnedEstimate = caloriesBurned,
             calorieTarget = calorieTarget,
             currentWeightKg = latestWeight?.weightKg,
+            weightUnit = settings.weightUnit,
+            profileComplete = settings.hasCompletedProfile,
+            hasActiveWorkout = sessions.any { it.endTimeEpochMillis == null },
             isLoading = false
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
+    val busy = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val error = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    fun startWorkout(onStarted: (Long) -> Unit) {
+        if (busy.value) return
+        busy.value = true; error.value = null
+        viewModelScope.launch {
+            try { onStarted(workoutRepository.startSession("Workout")) }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { error.value = e.message ?: "Unable to open your workout." }
+            finally { busy.value = false }
+        }
+    }
 }

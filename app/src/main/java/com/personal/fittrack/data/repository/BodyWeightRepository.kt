@@ -10,8 +10,11 @@ class BodyWeightRepository(private val dao: BodyWeightDao) {
     fun observeLatest(): Flow<BodyWeightEntity?> = dao.observeLatest()
 
     suspend fun logWeight(weightKg: Double, date: LocalDate = LocalDate.now()) {
+        require(com.personal.fittrack.domain.InputValidation.positive(weightKg)) { "Enter a weight greater than zero." }
         dao.insert(BodyWeightEntity(dateEpochDay = date.toEpochDay(), weightKg = weightKg))
     }
+
+    suspend fun restore(entry: BodyWeightEntity) = dao.insert(entry)
 
     suspend fun delete(id: Long) = dao.delete(id)
 }

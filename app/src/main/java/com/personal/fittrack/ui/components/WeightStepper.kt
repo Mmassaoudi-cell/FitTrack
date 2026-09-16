@@ -2,7 +2,7 @@ package com.personal.fittrack.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -29,23 +29,20 @@ fun WeightStepper(
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text("WEIGHT", style = MaterialTheme.typography.labelLarge)
         Text(
             text = "$weightLabel $unitLabel",
-            fontSize = 40.sp,
+            fontSize = 32.sp,
             fontWeight = FontWeight.Bold
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            increments.reversed().forEach { inc ->
-                OutlinedButton(onClick = { onAdjust(-inc) }) {
-                    Text("-${formatIncrement(inc)}")
-                }
-            }
-            increments.forEach { inc ->
-                OutlinedButton(onClick = { onAdjust(inc) }) {
-                    Text("+${formatIncrement(inc)}")
+        listOf(increments.reversed().map { -it }, increments).forEach { steps ->
+            androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                steps.forEach { increment ->
+                    OutlinedButton(onClick = { onAdjust(increment) }, modifier = Modifier.weight(1f)) {
+                        Text((if (increment > 0) "+" else "") + formatIncrement(increment))
+                    }
                 }
             }
         }
@@ -53,4 +50,4 @@ fun WeightStepper(
 }
 
 private fun formatIncrement(value: Double): String =
-    if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
+    if (value == value.toLong().toDouble()) value.toLong().toString() else "%.1f".format(value)

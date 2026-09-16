@@ -1,31 +1,13 @@
 package com.personal.fittrack.ui.workout
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -34,181 +16,110 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.personal.fittrack.FitTrackApp
-import com.personal.fittrack.domain.UnitConverter
-import com.personal.fittrack.domain.WeightUnit
-import com.personal.fittrack.ui.components.RepCounter
-import com.personal.fittrack.ui.components.WeightStepper
-import kotlin.math.roundToInt
-
-private val restPresets = listOf(30, 60, 90, 120, 180)
+import com.personal.fittrack.data.db.entity.SetEntryEntity
+import com.personal.fittrack.data.prefs.WorkoutDraftStore
+import com.personal.fittrack.domain.*
+import com.personal.fittrack.ui.components.*
 
 @Composable
-fun ActiveWorkoutScreen(sessionId: Long, onEndWorkout: () -> Unit) {
-    val app = LocalContext.current.applicationContext as FitTrackApp
-    val container = app.container
-    val viewModel: ActiveWorkoutViewModel = viewModel(factory = viewModelFactory {
-        initializer { ActiveWorkoutViewModel(sessionId, container.workoutRepository, container.userPreferences) }
+fun ActiveWorkoutScreen(sessionId: Long, onEndWorkout: () -> Unit, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val container = (context.applicationContext as FitTrackApp).container
+    val vm: ActiveWorkoutViewModel = viewModel(factory = viewModelFactory {
+        initializer { ActiveWorkoutViewModel(sessionId, container.workoutRepository, container.userPreferences, WorkoutDraftStore(context.applicationContext, sessionId)) }
     })
-    val state by viewModel.uiState.collectAsStateWithLifecycle()
-    var showExercisePicker by remember { mutableStateOf(false) }
-    var progressSummary by remember { mutableStateOf<ExerciseProgressSummary?>(null) }
-
-    LaunchedEffect(state.selectedExerciseId) {
-        state.selectedExerciseId?.let { progressSummary = viewModel.getProgressSummary(it) }
-    }
-
-    val displayUnit = state.weightUnit
-    fun toDisplay(kg: Double) = if (displayUnit == WeightUnit.LB) UnitConverter.kgToLb(kg) else kg
-    fun formatWeight(kg: Double): String {
-        val v = toDisplay(kg)
-        return if (v == v.toLong().toDouble()) v.toLong().toString() else String.format("%.1f", v)
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text(state.session?.name ?: "Workout") })
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Box2 {
-                    OutlinedButton(onClick = { showExercisePicker = true }) {
-                        Text(
-                            state.allExercises.firstOrNull { it.id == state.selectedExerciseId }?.name
-                                ?: "Choose exercise"
-                        )
+    val state by vm.uiState.collectAsStateWithLifecycle()
+    var picker by rememberSaveable { mutableStateOf(false) }
+    var confirmFinish by rememberSaveable { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<SetEntryEntity?>(null) }
+    var restSeconds by rememberSaveable { mutableIntStateOf(90) }
+    var autoRest by rememberSaveable { mutableStateOf(true) }
+    var weightInput by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(state.finished) { if (state.finished) onEndWorkout() }
+    androidx.activity.compose.BackHandler(enabled = state.busy) {}
+    val unit = state.weightUnit
+    Scaffold(contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0), topBar = { TopAppBar(title = { Text("Active workout") },
+        navigationIcon = { IconButton(onClick = onBack, enabled = !state.busy) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back; workout remains saved") } },
+        actions = { TextButton(onClick = { confirmFinish = true }, enabled = !state.busy && state.session != null) { Text("Finish") } }) },
+        bottomBar = {
+            Surface(tonalElevation = 3.dp) {
+                Button(onClick = { vm.completeSet(autoRest, restSeconds) },
+                    enabled = !state.busy && state.selectedExerciseId != null && state.draft.reps > 0,
+                    modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text(if (state.busy) "Saving…" else "Complete set · ${unit.format(state.draft.weightKg)} × ${state.draft.reps}")
+                }
+            }
+        }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text("${state.allSetsInSession.size} ${if (state.allSetsInSession.size == 1) "set" else "sets"} logged • Progress saved on this device", style = MaterialTheme.typography.bodySmall)
+            state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            OutlinedButton(onClick = { picker = true }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
+                Text(state.allExercises.find { it.id == state.selectedExerciseId }?.name ?: "Choose your first exercise")
+            }
+            if (state.exercisesInSession.size > 1) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    state.exercisesInSession.forEach { exercise ->
+                        FilterChip(selected = state.selectedExerciseId == exercise.id, onClick = { vm.selectExercise(exercise.id) }, enabled = !state.busy, label = { Text(exercise.name) })
                     }
-                    DropdownMenu(expanded = showExercisePicker, onDismissRequest = { showExercisePicker = false }) {
-                        state.allExercises.forEach { exercise ->
-                            DropdownMenuItem(
-                                text = { Text(exercise.name) },
-                                onClick = {
-                                    viewModel.selectExercise(exercise.id)
-                                    showExercisePicker = false
-                                }
-                            )
+                }
+            }
+            if (state.selectedExerciseId != null) {
+                state.progressSummary?.let { summary ->
+                    Text(summary.lastWeightKg?.let { "Last workout: ${unit.format(it)} × ${summary.lastReps} · Best ${unit.format(summary.bestWeightKg)}" }
+                        ?: "First session with this exercise", style = MaterialTheme.typography.bodyMedium)
+                }
+
+                WeightStepper("%.1f".format(unit.display(state.draft.weightKg)), unit.name.lowercase(),
+                    state.weightIncrements.map { unit.display(it) }, { vm.adjustWeight(unit.toKg(it)) })
+                TextButton(onClick = { weightInput = "%.2f".format(unit.display(state.draft.weightKg)) }, modifier = Modifier.fillMaxWidth()) { Text("Enter exact weight") }
+                RepCounter(state.draft.reps, vm::incrementReps, vm::decrementReps, vm::resetReps,
+                    if (state.setsForSelectedExercise.isNotEmpty()) vm::copyPreviousSet else null)
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Rest timer", style = MaterialTheme.typography.titleMedium)
+                            Switch(checked = autoRest, onCheckedChange = { autoRest = it })
+                        }
+                        Text("Start automatically after each set", style = MaterialTheme.typography.bodySmall)
+                        Text(state.restSecondsRemaining?.let { "${it / 60}:${(it % 60).toString().padStart(2, '0')}" } ?: "Ready when you are", style = MaterialTheme.typography.headlineMedium)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(30, 60, 90, 120, 180).forEach { seconds ->
+                                FilterChip(selected = restSeconds == seconds, onClick = { restSeconds = seconds; vm.startRestTimer(seconds) }, label = { Text("${seconds}s") })
+                            }
+                        }
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { if (state.restTimerRunning) vm.pauseRestTimer() else vm.resumeRestTimer() }, enabled = (state.restSecondsRemaining ?: 0) > 0) { Text(if (state.restTimerRunning) "Pause" else "Resume") }
+                            TextButton(onClick = vm::resetRestTimer) { Text("Reset") }
                         }
                     }
                 }
-                Button(onClick = {
-                    viewModel.endSession()
-                    onEndWorkout()
-                }) { Text("Finish") }
-            }
-
-            HorizontalDivider(Modifier.padding(vertical = 12.dp))
-
-            if (state.selectedExerciseId == null) {
-                Text("Pick an exercise to begin logging sets.", style = MaterialTheme.typography.bodyLarge)
-            } else {
-                progressSummary?.let { summary ->
+                Text("Completed sets", style = MaterialTheme.typography.titleMedium)
+                if (state.setsForSelectedExercise.isEmpty()) Text("Log your first set using the button below.")
+                state.setsForSelectedExercise.forEach { set ->
                     Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Progressive overload", style = MaterialTheme.typography.labelLarge)
-                            Text(
-                                "Previous: ${summary.lastWeightKg?.let { formatWeight(it) } ?: "-"} ${displayUnit.name.lowercase()} x ${summary.lastReps ?: "-"}"
-                            )
-                            Text("Best weight: ${formatWeight(summary.bestWeightKg)} ${displayUnit.name.lowercase()}  |  Best reps: ${summary.bestReps}  |  Best volume: ${summary.bestVolumeKg.roundToInt()} kg")
+                        Column(Modifier.padding(12.dp)) {
+                            Text("Set ${set.setIndex} · ${unit.format(set.weightKg)} × ${set.reps}")
+                            FlowRow {
+                                TextButton(onClick = { editing = set }, enabled = !state.busy) { Text("Edit") }
+                                TextButton(onClick = { vm.deleteSet(set) }, enabled = !state.busy) { Text("Delete") }
+                            }
                         }
                     }
-                    Spacer12()
                 }
-
-                WeightStepper(
-                    weightLabel = formatWeight(state.draft.weightKg),
-                    unitLabel = displayUnit.name.lowercase(),
-                    increments = state.weightIncrements.map { toDisplay(it) },
-                    onAdjust = { deltaDisplay ->
-                        val deltaKg = if (displayUnit == WeightUnit.LB) UnitConverter.lbToKg(deltaDisplay) else deltaDisplay
-                        viewModel.adjustWeight(deltaKg)
-                    }
-                )
-
-                Spacer12()
-
-                RepCounter(
-                    reps = state.draft.reps,
-                    onIncrement = viewModel::incrementReps,
-                    onDecrement = viewModel::decrementReps,
-                    onReset = viewModel::resetReps,
-                    onCopyPrevious = if (state.setsForSelectedExercise.isNotEmpty()) viewModel::copyPreviousSet else null
-                )
-
-                Spacer12()
-
-                Button(onClick = { viewModel.completeSet(autoStartRest = true, restSeconds = 90) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Complete Set")
-                }
-
-                Spacer12()
-
-                RestTimerCard(
-                    secondsRemaining = state.restSecondsRemaining,
-                    isRunning = state.restTimerRunning,
-                    onStartPreset = { viewModel.startRestTimer(it) },
-                    onPause = viewModel::pauseRestTimer,
-                    onResume = viewModel::resumeRestTimer,
-                    onReset = viewModel::resetRestTimer
-                )
-
-                Spacer12()
-
-                Text("Sets this exercise", style = MaterialTheme.typography.labelLarge)
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    state.setsForSelectedExercise.forEach { set ->
-                        Text("Set ${set.setIndex}: ${formatWeight(set.weightKg)} ${displayUnit.name.lowercase()} x ${set.reps}")
-                    }
-                }
-            }
+                TextButton(onClick = vm::undoDelete, enabled = !state.busy) { Text("Undo last deletion") }
+            } else Text("Choose an exercise, adjust your weight and reps, then complete a set. You can leave and resume any time.")
         }
     }
-}
-
-@Composable
-private fun Box2(content: @Composable () -> Unit) {
-    androidx.compose.foundation.layout.Box { content() }
-}
-
-@Composable
-private fun Spacer12() {
-    androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(6.dp))
-}
-
-@Composable
-private fun RestTimerCard(
-    secondsRemaining: Int?,
-    isRunning: Boolean,
-    onStartPreset: (Int) -> Unit,
-    onPause: () -> Unit,
-    onResume: () -> Unit,
-    onReset: () -> Unit
-) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Rest timer", style = MaterialTheme.typography.labelLarge)
-            Text(secondsRemaining?.let { "${it / 60}:${(it % 60).toString().padStart(2, '0')}" } ?: "--:--", style = MaterialTheme.typography.headlineMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                restPresets.forEach { preset ->
-                    AssistChip(onClick = { onStartPreset(preset) }, label = { Text("${preset}s") })
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (isRunning) {
-                    OutlinedButton(onClick = onPause) { Text("Pause") }
-                } else {
-                    OutlinedButton(onClick = onResume, enabled = secondsRemaining != null && secondsRemaining > 0) { Text("Resume") }
-                }
-                OutlinedButton(onClick = onReset) { Text("Reset") }
-            }
-        }
+    if (picker) ExercisePicker(state.allExercises, { vm.selectExercise(it.id); picker = false }, { picker = false })
+    editing?.let { set -> SetEditor(set, unit, { vm.editSet(it); editing = null }, { editing = null }) }
+    weightInput?.let { input ->
+        val number = InputValidation.number(input)
+        AlertDialog(onDismissRequest = { weightInput = null }, title = { Text("Set weight") }, text = {
+            NumberField(input, { weightInput = it }, "Weight (${unit.name.lowercase()})", Modifier.fillMaxWidth())
+        }, confirmButton = { TextButton(enabled = number != null && number >= 0, onClick = { vm.setDraft(unit.toKg(number!!), state.draft.reps); weightInput = null }) { Text("Apply") } }, dismissButton = { TextButton(onClick = { weightInput = null }) { Text("Cancel") } })
     }
+    if (confirmFinish) AlertDialog(onDismissRequest = { confirmFinish = false }, title = { Text("Finish this workout?") },
+        text = { Text("${state.allSetsInSession.size} completed sets will stay in your history. Your next workout starts a new session.") },
+        confirmButton = { TextButton(onClick = { confirmFinish = false; vm.endSession() }) { Text("Finish workout") } },
+        dismissButton = { TextButton(onClick = { confirmFinish = false }) { Text("Keep training") } })
 }

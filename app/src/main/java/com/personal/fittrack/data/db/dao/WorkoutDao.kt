@@ -4,12 +4,62 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Transaction
 import com.personal.fittrack.data.db.entity.SetEntryEntity
 import com.personal.fittrack.data.db.entity.WorkoutSessionEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface WorkoutDao {
+    @Query("SELECT * FROM workout_routines ORDER BY name")
+    fun observeRoutines(): Flow<List<com.personal.fittrack.data.db.entity.WorkoutRoutineEntity>>
+
+    @Query("SELECT * FROM workout_routines")
+    suspend fun getRoutines(): List<com.personal.fittrack.data.db.entity.WorkoutRoutineEntity>
+
+    @Insert
+    suspend fun insertRoutine(routine: com.personal.fittrack.data.db.entity.WorkoutRoutineEntity): Long
+
+    @Query("DELETE FROM workout_routines WHERE id = :id")
+    suspend fun deleteRoutine(id: Long)
+
+    @Query("DELETE FROM workout_routines")
+    suspend fun clearRoutines()
+
+    @Query("SELECT * FROM workout_sessions WHERE endTimeEpochMillis IS NULL ORDER BY startTimeEpochMillis DESC LIMIT 1")
+    suspend fun getActiveSession(): WorkoutSessionEntity?
+
+    @Query("SELECT * FROM set_entries ORDER BY completedAtEpochMillis DESC")
+    fun observeAllSets(): Flow<List<SetEntryEntity>>
+
+    @Transaction
+    suspend fun startOrResume(name: String, exercisePlan: String = ""): Long = getActiveSession()?.id ?: insertSession(
+        WorkoutSessionEntity(name = name, startTimeEpochMillis = System.currentTimeMillis(), exercisePlan = exercisePlan)
+    )
+
+    @Transaction
+    suspend fun appendSet(sessionId: Long, exerciseId: Long, weightKg: Double, reps: Int): Long {
+        val session = getSession(sessionId) ?: error("This workout no longer exists.")
+        check(session.endTimeEpochMillis == null) { "This workout has already finished." }
+        val sets = getSetsForSessionSync(sessionId)
+        val matching = sets.filter { it.exerciseId == exerciseId }
+        return insertSet(SetEntryEntity(
+            sessionId = sessionId, exerciseId = exerciseId,
+            orderInSession = matching.firstOrNull()?.orderInSession ?: ((sets.maxOfOrNull { it.orderInSession } ?: -1) + 1),
+            setIndex = (matching.maxOfOrNull { it.setIndex } ?: 0) + 1,
+            weightKg = weightKg, reps = reps, completedAtEpochMillis = System.currentTimeMillis()
+        ))
+    }
+
+    @Transaction
+    suspend fun restoreDeletedSet(set: SetEntryEntity): Long {
+        val sets = getSetsForSessionSync(set.sessionId)
+        val sameExercise = sets.filter { it.exerciseId == set.exerciseId }
+        val index = if (sameExercise.any { it.setIndex == set.setIndex }) (sameExercise.maxOf { it.setIndex } + 1) else set.setIndex
+        val order = sameExercise.firstOrNull()?.orderInSession ?: ((sets.maxOfOrNull { it.orderInSession } ?: -1) + 1)
+        return insertSet(set.copy(setIndex = index, orderInSession = order))
+    }
+
     @Insert
     suspend fun insertSession(session: WorkoutSessionEntity): Long
 

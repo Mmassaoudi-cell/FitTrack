@@ -20,9 +20,10 @@ import com.personal.fittrack.data.db.entity.WorkoutSessionEntity
         SetEntryEntity::class,
         BodyWeightEntity::class,
         FoodItemEntity::class,
+        com.personal.fittrack.data.db.entity.WorkoutRoutineEntity::class,
         FoodLogEntryEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {

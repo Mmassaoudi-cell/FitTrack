@@ -41,8 +41,8 @@ class ExerciseProgressViewModel(
 data class BodyWeightUiState(
     val entries: List<BodyWeightEntity> = emptyList()
 ) {
-    val startingWeightKg: Double? get() = entries.minByOrNull { it.dateEpochDay }?.weightKg
-    val currentWeightKg: Double? get() = entries.maxByOrNull { it.dateEpochDay }?.weightKg
+    val startingWeightKg: Double? get() = entries.firstOrNull()?.weightKg
+    val currentWeightKg: Double? get() = entries.lastOrNull()?.weightKg
     val differenceKg: Double? get() {
         val start = startingWeightKg ?: return null
         val current = currentWeightKg ?: return null
@@ -55,7 +55,19 @@ class BodyWeightViewModel(private val repository: BodyWeightRepository) : ViewMo
         .map { BodyWeightUiState(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BodyWeightUiState())
 
-    fun logWeight(weightKg: Double) {
-        viewModelScope.launch { repository.logWeight(weightKg) }
+    val error = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    val busy = kotlinx.coroutines.flow.MutableStateFlow(false)
+    private var deleted: BodyWeightEntity? = null
+    private fun run(action: suspend () -> Unit) {
+        if (busy.value) return
+        busy.value = true; error.value = null
+        viewModelScope.launch {
+            try { action() } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { error.value = e.message ?: "Unable to save weight." }
+            finally { busy.value = false }
+        }
     }
+    fun logWeight(weightKg: Double, date: java.time.LocalDate, onSaved: () -> Unit) = run { repository.logWeight(weightKg, date); onSaved() }
+    fun delete(entry: BodyWeightEntity) = run { repository.delete(entry.id); deleted = entry }
+    fun undo() = run { deleted?.let { repository.restore(it); deleted = null } }
 }

@@ -17,5 +17,7 @@ data class BackupData(
     val sets: List<SetEntryEntity>,
     val bodyWeights: List<BodyWeightEntity>,
     val foodItems: List<FoodItemEntity>,
-    val foodLogEntries: List<FoodLogEntryEntity>
+    val foodLogEntries: List<FoodLogEntryEntity>,
+    val settings: com.personal.fittrack.data.prefs.AppSettings? = null,
+    val routines: List<com.personal.fittrack.data.db.entity.WorkoutRoutineEntity> = emptyList()
 )

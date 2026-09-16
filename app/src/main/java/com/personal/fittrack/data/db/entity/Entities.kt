@@ -22,7 +22,8 @@ data class WorkoutSessionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val startTimeEpochMillis: Long,
-    val endTimeEpochMillis: Long? = null
+    val endTimeEpochMillis: Long? = null,
+    @androidx.room.ColumnInfo(defaultValue = "''") val exercisePlan: String = ""
 )
 
 @Serializable
@@ -72,7 +73,8 @@ data class FoodItemEntity(
     val proteinPer100g: Double,
     val carbsPer100g: Double,
     val fatPer100g: Double,
-    val isCustom: Boolean = false
+    val isCustom: Boolean = false,
+    @androidx.room.ColumnInfo(defaultValue = "0") val isFavorite: Boolean = false
 )
 
 @Serializable
@@ -102,4 +104,12 @@ data class FoodLogEntryEntity(
     val loggedAtEpochMillis: Long,
     val confidence: String? = null,
     val source: String = "MANUAL"
+)
+
+@Serializable
+@Entity(tableName = "workout_routines")
+data class WorkoutRoutineEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val exerciseIds: String
 )

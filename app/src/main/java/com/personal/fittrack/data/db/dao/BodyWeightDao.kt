@@ -9,10 +9,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface BodyWeightDao {
-    @Query("SELECT * FROM body_weight_entries ORDER BY dateEpochDay ASC")
+    @Query("SELECT * FROM body_weight_entries ORDER BY dateEpochDay ASC, id ASC")
     fun observeAll(): Flow<List<BodyWeightEntity>>
 
-    @Query("SELECT * FROM body_weight_entries ORDER BY dateEpochDay DESC LIMIT 1")
+    @Query("SELECT * FROM body_weight_entries ORDER BY dateEpochDay DESC, id DESC LIMIT 1")
     fun observeLatest(): Flow<BodyWeightEntity?>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

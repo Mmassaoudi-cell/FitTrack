@@ -22,36 +22,15 @@ data class SessionSummary(
 )
 
 class WorkoutHistoryViewModel(private val repository: WorkoutRepository) : ViewModel() {
-    private val sessionSetsCache = MutableStateFlow<Map<Long, List<SetEntryEntity>>>(emptyMap())
-
     val summaries: StateFlow<List<SessionSummary>> = combine(
-        repository.observeSessions(),
-        sessionSetsCache
-    ) { sessions, cache ->
+        repository.observeSessions(), repository.observeAllSets()
+    ) { sessions, allSets ->
+        val grouped = allSets.groupBy { it.sessionId }
         sessions.map { session ->
-            val sets = cache[session.id].orEmpty()
-            SessionSummary(
-                session = session,
-                exerciseCount = VolumeCalculator.distinctExerciseCount(sets),
-                totalSets = sets.size,
-                totalVolumeKg = VolumeCalculator.totalVolume(sets)
-            )
+            val sets = grouped[session.id].orEmpty()
+            SessionSummary(session, VolumeCalculator.distinctExerciseCount(sets), sets.size, VolumeCalculator.totalVolume(sets))
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    init {
-        viewModelScope.launch {
-            repository.observeSessions().collect { sessions ->
-                val updated = sessionSetsCache.value.toMutableMap()
-                sessions.forEach { session ->
-                    if (session.id !in updated) {
-                        updated[session.id] = repository.getSetsForSessionSync(session.id)
-                    }
-                }
-                sessionSetsCache.value = updated
-            }
-        }
-    }
 }
 
 data class SessionDetailUiState(
